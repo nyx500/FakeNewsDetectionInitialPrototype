@@ -95,6 +95,7 @@ def preprocessingPipeline(text, regex_dict):
     
     Input Parameters:
         text (str): The text to preprocess
+        regex_dict (dict): A dictionary of regular expressions for filtering the text
     
     Output:
         processed_text (str): The preprocessed text
