@@ -110,10 +110,11 @@ def preprocessingPipeline(text, regex_dict):
     # Remove stopwords to further reduce dimensionality
     no_stopwords = [word for word in words if word.lower() not in stop_words]
     
-    # Lemmatize words
+   # Lemmatize words to get root dictionary forms
     lemmatizer = WordNetLemmatizer()
     tokens = [lemmatizer.lemmatize(word) for word in no_stopwords]
     
+    # Rejoin word tokens    
     return ' '.join(tokens)
 
 ##########################################################################################################################################################
