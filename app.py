@@ -10,23 +10,6 @@ import joblib
 import lime.lime_text
 # For visualizations
 import matplotlib.pyplot as plt
-# NLTK functionality for inputted news text preprocessing
-import nltk
-from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
-
-# Reference: "Display a loading spinner while executing a block of code." https://docs.streamlit.io/develop/api-reference/status/st.spinner
-with st.spinner("Downloading the required NLTK text preprocessing libraries..."):
-    # Download the text preprocessing libraries required for the NLTK preprocessing pipeline
-    nltk.download("wordnet") # for Lemmatizer
-    nltk.download("punkt") # for Word Tokenization
-    nltk.download("punkt_tab")
-    nltk.download("averaged_perceptron_tagger") # POS-tags if required for lemmatizer
-    nltk.download("averaged_perceptron_tagger_eng") 
-    nltk.download("stopwords") # For stopwords
-    # Create set out of English stopwords
-    stop_words = set(stopwords.words("english"))
 
 # Load the WELFake-trained Passive-Aggressive classifier model using st.cache_resource
 # Reference: "Decorator to cache functions that return global resources (e.g. database connections, ML models).""
@@ -34,91 +17,6 @@ with st.spinner("Downloading the required NLTK text preprocessing libraries...")
 @st.cache_resource
 def loadModel():
     return joblib.load("models/my_model2.joblib")
-
-
-######################################################## TEXT PREPROCESSING ####################################################################################
-# Define regular expressions for filtering the inputted news text in the same way that the WELFake data was filtered when training the model
-regex_dict = {
-    "hashtags": r"#\w+", # Matches hashtag followed by any number of "word" (number or alphabetic letter) characters
-    "mentions": r"@[\w-]+", # Matches tags and mentions on Twitter (X), social media starting with @ and followed by 1 or more either word-character or hyphen
-    "numbers": r"\b\d+\b", # Matches at least one number surrounded by a word boundary (usually a space)]
-    # Matches at least one word or hyphen, followed by obligatory '@', followed by word/hyphens, followed by dot and 2-4 word chars
-    # Reference: https://regexr.com/3e48o
-    "emails": r"^[\w\.-]+@([\w-]+\.)+[\w-]{2,4}$", 
-    # Matches URLs starting with HTTP(S)//:...
-    # Reference: https://uibakery.io/regex-library/url
-    "urls": r"https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&\/=]*)",
-    # Matches URLs NOT starting with HTTP(S)//...
-    # Reference: https://uibakery.io/regex-library/url
-    "non-http-urls": r"[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)",
-    # Matches times, e.g. 10:00pm
-    # Reference: https://regexr.com/398vb
-    "times": r"\b\d{1,2}:\d{2}\s*(?:am|pm|AM|PM)?\b",
-    # Matches dates, e.g. 08/01/2019 to stop classifier learning overly-specific patterns and overfitting
-    "dates": r"\b(\d{2})/(\d{2})/\d{4}\b",
-    # Remove non-word or space chars (i.e. all punctuation): important to do this at the END as otherwise previous patterns won't be matched
-    "punctuation": r"[^\w\s]",
-}
- 
-def filterWithRegex(text, regex_dict):
-    """
-    Applies lowercasing to a text and applies the dict of regexes to remove unwanted matched patterns from the inputted text
-    
-    Input Parameters:
-        text (str): the text to filter using the regular expressions dict defined above
-    
-    Output:
-        cleaned_text (str): the text with matched regular expressions removed
-    """
-
-    # Ensure that "text" is in string format
-    text = str(text)
-
-    # Lowercase the text
-    text = text.lower()
-    
-    # Iterate over regular expressions (values) in the regex dict to filter the text
-    for regex in regex_dict.values():
-        text = re.sub(regex, "", text)
-    
-    # Remove any remaining whitespace after filtering the text; \s+ matches any kind of trailing space and replaces it with a single space
-    # .strip() removes any leading or trailing whitespace
-    cleaned_text = re.sub(r"\s+", " ", text).strip()
-    
-    return cleaned_text
-
-
-def preprocessingPipeline(text, regex_dict):
-    """
-    This function applies standard NLP preprocessing and thorough regular expression cleaning to the inputted text in preparation
-    for dimensionality-reduced TF-IDF vectorization.
-    
-    Input Parameters:
-        text (str): The text to preprocess
-        regex_dict (dict): A dictionary of regular expressions for filtering the text
-    
-    Output:
-        processed_text (str): The preprocessed text
-    """
-
-    # Convert the text to lowercase and uses regular expressions to remove URL, email, hashtag patterns etc.
-    text = filterWithRegex(text, regex_dict)
-    
-    # Tokenize the text string into individual word tokens
-    words = word_tokenize(text)
-    
-    # Remove stopwords to further reduce dimensionality
-    no_stopwords = [word for word in words if word.lower() not in stop_words]
-    
-   # Lemmatize words to get root dictionary forms
-    lemmatizer = WordNetLemmatizer()
-    tokens = [lemmatizer.lemmatize(word) for word in no_stopwords]
-    
-    # Rejoin word tokens    
-    return ' '.join(tokens)
-
-##########################################################################################################################################################
-
 
 
 def generateLIMEExplanation(pipeline, text, num_features=30):
@@ -268,11 +166,10 @@ with tab1:
                 with st.spinner("Loading detection model..."):
                     pipeline = loadModel()
                 
-                # Preprocesses the user's inputted text and show progress to user
-                with st.spinner("Preprocessing the news text..."):
-                    preprocessed_text = preprocessingPipeline(news_text, regex_dict)
+                # Analyzes the user's inputted text with the LIME explainer and show spinner to user
+                with st.spinner("Analyzing the text..."):
                     # Get the probability of the news being fake news by extracting the probability array (at index 0 as there is only one sample)
-                    prediction = pipeline.predict_proba([preprocessed_text])[0]
+                    prediction = pipeline.predict_proba([news_text])[0]
                 
                 # Displays prediction results
                 st.subheader("Results:")
@@ -286,7 +183,7 @@ with tab1:
                 
                 # Applies the LIME feature importance explanation function to get the importance features for the prediction as plot and list of score tuples
                 with st.spinner("Analyzing important text features and generating explanation..."):
-                    figure, features = generateLIMEExplanation(pipeline, preprocessed_text)
+                    figure, features = generateLIMEExplanation(pipeline, news_text)
 
                 # Generates and displays the LIME explanation as a matplotlib bar chart if user selected "Lime Explainer" instead of "Natural Language"
                 if explanation_type == "LIME Explainer":
@@ -312,7 +209,7 @@ with tab1:
 
                     st.markdown(ranked_words)
 
-                # Generate and display the Natural Language explanation if user selects the "Natural Langugae" option instead of the "LIME Explainer" option
+                # Generates and displays the Natural Language explanation if user selects the "Natural Langugae" option instead of the "LIME Explainer" option
                 else:  # Natural Language
                     st.subheader("Text Explanation")
                     explanation = convertToNaturalLanguageExplanation(features, prediction[1])
